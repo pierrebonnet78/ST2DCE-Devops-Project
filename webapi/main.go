@@ -7,10 +7,10 @@ import (
 	"net/http"
 )
 
+
 type whoami struct {
-	Name  string
-	Title string
-	State string
+	FirstName  string
+	LastName   string
 }
 
 func main() {
@@ -19,9 +19,14 @@ func main() {
 
 func whoAmI(response http.ResponseWriter, r *http.Request) {
 	who := []whoami{
-		whoami{Name: "Efrei Paris",
-			Title: "DevOps and Continous Deployment",
-			State: "FR",
+		whoami{FirstName: "Pierre",
+			LastName: "Bonnet",
+		},
+		whoami{FirstName: "Arthur",
+			LastName: "Buisson",
+		},
+		whoami{FirstName: "Timothee",
+			LastName: "Fougeron",
 		},
 	}
 

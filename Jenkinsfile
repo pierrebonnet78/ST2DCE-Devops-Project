@@ -9,6 +9,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                branch 'main',
                 git 'https://github.com/pierrebonnet78/ST2DCE-Devops-Project.git'
             }
         }

@@ -4,6 +4,9 @@ pipeline {
     environment {
         IMAGE_NAME = "go-app:latest"
         CONTAINER_NAME = "go-app-container"
+         DEPLOYMENT_NAME = "go-app-deployment"
+        NAMESPACE_DEV = "development"
+        NAMESPACE_PROD = "production"
     }
 
     stages {
@@ -20,30 +23,48 @@ pipeline {
                 }
             }
         }
-        stage('Run Docker Container') {
+        stage('Load Image into Minikube') {
             steps {
                 script {
-                    // Stop and remove the container if it's already running
-                    sh 'docker rm -f ${CONTAINER_NAME} || true'
-                    
-                    // Run the container
+                    sh 'minikube image load ${IMAGE_NAME}'
+                }
+            }
+        }
+        stage('Deploy to Development') {
+            steps {
+                script {
+                    // Create or update the deployment in the development namespace
                     sh '''
-                    docker run -d --name ${CONTAINER_NAME} -p 8081:8080 ${IMAGE_NAME}
+                    kubectl create namespace ${NAMESPACE_DEV} || true
+                    kubectl apply -f k8s/deployment-dev.yaml -n ${NAMESPACE_DEV}
                     '''
                 }
             }
         }
-        stage('Test Application') {
-            steps {
-                script {
-                    // Wait for the container to start
-                    sh 'sleep 10'
+        // stage('Run Docker Container') {
+        //     steps {
+        //         script {
+        //             // Stop and remove the container if it's already running
+        //             sh 'docker rm -f ${CONTAINER_NAME} || true'
+                    
+        //             // Run the container
+        //             sh '''
+        //             docker run -d --name ${CONTAINER_NAME} -p 8081:8080 ${IMAGE_NAME}
+        //             '''
+        //         }
+        //     }
+        // }
+        // stage('Test Application') {
+        //     steps {
+        //         script {
+        //             // Wait for the container to start
+        //             sh 'sleep 10'
 
-                    // Perform a test request
-                    sh 'curl -f http://localhost:8081/whoami'
-                }
-            }
-        }
+        //             // Perform a test request
+        //             sh 'curl -f http://localhost:8081/whoami'
+        //         }
+        //     }
+        // }
     }
 
     post {

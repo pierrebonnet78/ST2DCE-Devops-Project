@@ -9,7 +9,8 @@ RUN apt-get update && \
     curl \
     gnupg \
     lsb-release \
-    sudo
+    sudo \
+    wget
 
 # Add Docker's official GPG key
 RUN mkdir -p /etc/apt/keyrings && \
@@ -28,11 +29,14 @@ RUN apt-get update && \
 RUN usermod -aG docker jenkins
 
 # Configure sudo for jenkins user
-RUN echo "jenkins ALL=(ALL) NOPASSWD: /usr/bin/dockerd" >> /etc/sudoers
+RUN echo "jenkins ALL=(ALL) NOPASSWD: /usr/bin/dockerd, /usr/bin/java" >> /etc/sudoers
 
 # Create start-up script
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
+
+# Copy jenkins configuration
+COPY create_pipeline.groovy /var/jenkins_home/init.groovy.d/
 
 # Switch back to jenkins user
 USER jenkins

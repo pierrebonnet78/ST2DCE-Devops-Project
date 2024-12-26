@@ -1,0 +1,89 @@
+pipeline {
+    agent {
+        kubernetes {
+            defaultContainer 'kaniko'
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kaniko
+spec:
+  containers:
+    - name: git
+      image: alpine/git
+      command:
+        - /bin/cat
+      tty: true
+      volumeMounts:
+        - name: shared-workspace
+          mountPath: /workspace
+    - name: kaniko
+      image: gcr.io/kaniko-project/executor:debug
+      command:
+        - /busybox/cat
+      tty: true
+      volumeMounts:
+        - name: shared-workspace
+          mountPath: /workspace
+    - name: kubectl
+      image: joshendriks/alpine-k8s
+      command:
+        - /bin/cat
+      tty: true    
+  volumes:
+    - name: shared-workspace
+      emptyDir: {}
+    - name: docker-socket
+      hostPath:
+        path: /var/run/docker.sock
+"""
+        }
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                container('git') {
+                    sh '''
+                    rm -rf /workspace/* || true
+                    git clone https://github.com/pierrebonnet78/ST2DCE-Devops-Project.git /workspace/project
+                    ls -la /workspace/project
+                    '''
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                container('kaniko') {
+                    sh '''
+                    echo "Current working directory: $(pwd)"
+                    echo "Contents of /workspace/project:"
+                    ls -la /workspace/project
+                    
+                    /kaniko/executor \
+                        --dockerfile=/workspace/project/Dockerfile \
+                        --context=/workspace/project \
+                        --destination=localhost:5000/go-app:${BUILD_NUMBER}
+                    '''
+                }
+            }
+        }
+
+        stage('Push to Minikube') {
+            steps {
+                sh 'minikube image load go-app:${BUILD_NUMBER}'
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                container('kubectl') {
+                    withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                        sh 'kubectl apply -f k8s_deployment_dev.yaml'
+                    }
+                }
+            }
+        }
+    }
+}

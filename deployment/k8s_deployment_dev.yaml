@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
         - name: go-app
-          image: go-app:latest
-          imagePullPolicy: Never
+          image: registry.kube-system.svc.cluster.local:80/go-app:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
 ---
@@ -32,5 +32,4 @@ spec:
     - protocol: TCP
       port: 8080
       targetPort: 8080
-
   type: ClusterIP

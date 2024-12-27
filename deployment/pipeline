@@ -204,20 +204,24 @@ spec:
                         helm repo add grafana https://grafana.github.io/helm-charts
                         helm repo update
                         
-                        # Apply AlertManager config
-                        kubectl apply -f /workspace/project/deployment/alertmanager-config.yaml
+                        # Apply the rules ConfigMap
+                        kubectl apply -f /workspace/project/deployment/prometheus-alerts.yaml -n monitoring
 
-                        # Install Prometheus Stack with AlertManager configuration
+                        # Install Prometheus Stack with rules configuration
                         helm upgrade --install prometheus prometheus-community/prometheus \
                             --namespace monitoring \
                             --set server.persistentVolume.enabled=false \
                             --set alertmanager.persistentVolume.enabled=false \
-                            --set alertmanager.configMapOverrideName=alertmanager-config \
                             --set alertmanager.enabled=true \
                             --set server.extraFlags={"web.enable-lifecycle"} \
-                            --set serverFiles."alerting\.rules".configMap=prometheus-alerts \
+                            --set server.configMapOverrideName=prometheus-rules \
+                            --set-file server.alerting.rules=/workspace/project/deployment/prometheus-alerts.yaml \
                             --wait
                         
+                        # Wait for Prometheus to be ready
+                        kubectl rollout status statefulset/prometheus-server -n monitoring --timeout=300s
+                        
+
                         # Install Grafana
                         helm upgrade --install grafana grafana/grafana \
                             --namespace monitoring \
@@ -230,6 +234,16 @@ spec:
                             --set datasources."datasources\\.yaml".datasources[0].access=proxy \
                             --set datasources."datasources\\.yaml".datasources[0].isDefault=true \
                             --wait
+
+                        # Verify rules are loaded
+                        echo "Waiting for Prometheus to be ready..."
+                        sleep 10
+                        
+                        # Get Prometheus pod name
+                        PROMETHEUS_POD=$(kubectl get pods -n monitoring -l app=prometheus,component=server -o jsonpath="{.items[0].metadata.name}")
+                        
+                        echo "Checking configured rules..."
+                        kubectl exec -n monitoring $PROMETHEUS_POD -- wget -qO- http://localhost:9090/api/v1/rules
                         '''
                     }
                 }
@@ -274,7 +288,7 @@ spec:
                Password: admin
 
             To access AlertManager:
-            1. Run: kubectl port-forward -n monitoring svc/alertmanager-main 9093:9093
+            1. Run: kubectl port-forward -n monitoring svc/prometheus-alertmanager 9093:9093
             2. Visit: http://localhost:9093
 
             To access Prometheus:

@@ -25,17 +25,17 @@ spec:
       volumeMounts:
         - name: shared-workspace
           mountPath: /workspace
-    - name: kubectl
-      image: joshendriks/alpine-k8s
+    - name: deployer
+      image: dtzar/helm-kubectl:latest
       command:
         - /bin/cat
-      tty: true    
+      tty: true
+      volumeMounts:
+        - name: shared-workspace
+          mountPath: /workspace
   volumes:
     - name: shared-workspace
       emptyDir: {}
-    - name: docker-socket
-      hostPath:
-        path: /var/run/docker.sock
 """
         }
     }
@@ -53,37 +53,242 @@ spec:
             }
         }
 
+        stage('Get Minikube Registry IP Address') {
+            steps {
+                container('deployer') {
+                    script {
+                        withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                            sh '''
+                            mkdir -p /root/.kube
+                            cp $KUBECONFIG /root/.kube/config
+                            REGISTRY_IP=$(kubectl get svc registry -n kube-system -o jsonpath='{.spec.clusterIP}')
+                            echo "REGISTRY_IP=$REGISTRY_IP" > /workspace/registry.env
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 container('kaniko') {
                     sh '''
-                    echo "Current working directory: $(pwd)"
-                    echo "Contents of /workspace/project:"
-                    ls -la /workspace/project
+                    source /workspace/registry.env
+                    echo "Building image and pushing to $REGISTRY_IP:80"
                     
                     /kaniko/executor \
                         --dockerfile=/workspace/project/Dockerfile \
                         --context=/workspace/project \
-                        --destination=localhost:5000/go-app:${BUILD_NUMBER}
+                        --destination=$REGISTRY_IP:80/go-app:${BUILD_NUMBER} \
+                        --insecure \
                     '''
                 }
             }
         }
 
-        stage('Push to Minikube') {
+        stage('Deploy to Development') {
             steps {
-                sh 'minikube image load go-app:${BUILD_NUMBER}'
-            }
-        }
-
-        stage('Deploy to Kubernetes') {
-            steps {
-                container('kubectl') {
+                container('deployer') {
                     withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
-                        sh 'kubectl apply -f k8s_deployment_dev.yaml'
+                        sh '''
+                        source /workspace/registry.env
+                        
+                        # Create development namespace if it doesn't exist
+                        kubectl create namespace development --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        # Copy kubeconfig
+                        mkdir -p /root/.kube
+                        cp $KUBECONFIG /root/.kube/config
+                        
+                        # Replace image and namespace in deployment file
+                        sed -i "s|image: .*|image: $REGISTRY_IP:80/go-app:${BUILD_NUMBER}|g" /workspace/project/deployment/k8s_deployment_dev.yaml
+                        
+                        # Apply the deployment to development namespace
+                        kubectl apply -f /workspace/project/deployment/k8s_deployment_dev.yaml -n development
+                        
+                        # Wait for deployment with timeout
+                        timeout 300s kubectl rollout status deployment/go-app-deployment -n development || exit 1
+                        
+                        # Show deployment status
+                        echo "Development deployment status:"
+                        kubectl get deployments,pods,services -n development
+                        '''
                     }
                 }
             }
+        }
+
+        stage('Test Application Endpoint') {
+            steps {
+                container('deployer') {
+                    withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                        sh '''
+                        # Wait for service to get an IP and endpoints to be ready
+                        echo "Waiting for service to be ready..."
+                
+                # Wait for endpoints to be ready (max 60 seconds)
+                for i in $(seq 1 30); do
+                    if kubectl get endpoints go-app-service -n development -o jsonpath='{.subsets[0].addresses[0].ip}' > /dev/null 2>&1; then
+                        echo "Service endpoints are ready!"
+                        break
+                        fi
+                        echo "Waiting for service endpoints... (Attempt $i/30)"
+                        sleep 2
+                        if [ $i -eq 30 ]; then
+                            echo "Timeout waiting for service endpoints"
+                            exit 1
+                        fi
+                        done
+                        
+                        # Get service URL
+                        SERVICE_IP=$(kubectl get svc go-app-service -n development -o jsonpath='{.spec.clusterIP}')
+                        SERVICE_PORT=$(kubectl get svc go-app-service -n development -o jsonpath='{.spec.ports[0].port}')
+                        SERVICE_URL="http://${SERVICE_IP}:${SERVICE_PORT}"
+                        
+                        echo "Testing service at ${SERVICE_URL}"
+                        
+                        # Test the endpoint
+                        response=$(curl -s -o /dev/null -w "%{http_code}" ${SERVICE_URL}/whoami)
+                        
+                        if [ "$response" = "200" ]; then
+                            echo "Test passed! Service returned 200"
+                        else
+                            echo "Test failed! Service returned $response"
+                            exit 1
+                        fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Production') {
+            steps {
+                container('deployer') {
+                    withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                        sh '''
+                        source /workspace/registry.env
+                        
+                        # Create production namespace if it doesn't exist
+                        kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        # Replace image and namespace in deployment file
+                        sed -i "s|image: .*|image: $REGISTRY_IP:80/go-app:${BUILD_NUMBER}|g" /workspace/project/deployment/k8s_deployment_prod.yaml
+                        
+                        # Apply the deployment to production namespace
+                        kubectl apply -f /workspace/project/deployment/k8s_deployment_prod.yaml -n production
+                        
+                        # Wait for deployment with timeout
+                        timeout 300s kubectl rollout status deployment/go-app-deployment -n production || exit 1
+                        
+                        # Show deployment status
+                        echo "Production deployment status:"
+                        kubectl get deployments,pods,services -n production
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Install Monitoring Stack') {
+            steps {
+                container('deployer') {
+                    withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                        sh '''
+                        # Create monitoring namespace
+                        kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        # Add Helm repositories
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                        helm repo add grafana https://grafana.github.io/helm-charts
+                        helm repo update
+                        
+                        # Install Prometheus Stack
+                        helm upgrade --install prometheus prometheus-community/prometheus \
+                            --namespace monitoring \
+                            --set server.persistentVolume.enabled=false \
+                            --set alertmanager.persistentVolume.enabled=false \
+                            --wait
+                        
+                        # Install Grafana
+                        helm upgrade --install grafana grafana/grafana \
+                            --namespace monitoring \
+                            --set persistence.enabled=false \
+                            --set adminPassword=admin \
+                            --set datasources."datasources\\.yaml".apiVersion=1 \
+                            --set datasources."datasources\\.yaml".datasources[0].name=Prometheus \
+                            --set datasources."datasources\\.yaml".datasources[0].type=prometheus \
+                            --set datasources."datasources\\.yaml".datasources[0].url=http://prometheus-server.monitoring.svc.cluster.local \
+                            --set datasources."datasources\\.yaml".datasources[0].access=proxy \
+                            --set datasources."datasources\\.yaml".datasources[0].isDefault=true \
+                            --wait
+                        
+                        # Get Grafana admin password
+                        echo "Grafana admin password: admin"
+                        
+                        # Get service URLs
+                        echo "Prometheus URL:"
+                        kubectl get svc -n monitoring prometheus-server -o jsonpath='{.spec.clusterIP}:{.spec.ports[0].port}'
+                        echo ""
+                        
+                        echo "Grafana URL:"
+                        kubectl get svc -n monitoring grafana -o jsonpath='{.spec.clusterIP}:{.spec.ports[0].port}'
+                        echo ""
+                        
+                        # Create port-forward instructions
+                        echo "To access Grafana UI, run:"
+                        echo "kubectl port-forward -n monitoring svc/grafana 3000:80"
+                        echo "Then visit: http://localhost:3000"
+                        echo "Username: admin"
+                        echo "Password: admin"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Configure Grafana Dashboard') {
+            steps {
+                container('deployer') {
+                    withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                        sh '''
+                        # Wait for Grafana to be ready
+                        kubectl rollout status deployment/grafana -n monitoring
+                        
+                        # Get Grafana pod name
+                        GRAFANA_POD=$(kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].metadata.name}')
+                        
+                        # Import Kubernetes dashboard
+                        kubectl exec -n monitoring $GRAFANA_POD -- curl -X POST \
+                            -H "Content-Type: application/json" \
+                            -d '{"dashboard": {"id": null,"title": "Kubernetes Cluster","timezone": "browser","schemaVersion": 16,"version": 0},"folderId": 0,"overwrite": true}' \
+                            http://admin:admin@localhost:3000/api/dashboards/db
+                        
+                        echo "Grafana dashboard has been configured"
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo """
+            Pipeline completed successfully!
+            
+            To access Grafana:
+            1. Run: kubectl port-forward -n monitoring svc/grafana 3000:80
+            2. Visit: http://localhost:3000
+            3. Login with:
+               Username: admin
+               Password: admin
+            
+            To access Prometheus:
+            1. Run: kubectl port-forward -n monitoring svc/prometheus-server 9090:80
+            2. Visit: http://localhost:9090
+            """
         }
     }
 }

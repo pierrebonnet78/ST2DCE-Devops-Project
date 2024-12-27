@@ -204,8 +204,9 @@ spec:
                         helm repo add grafana https://grafana.github.io/helm-charts
                         helm repo update
                         
-                        # Apply the rules ConfigMap
-                        kubectl apply -f /workspace/project/deployment/prometheus-alerts.yaml -n monitoring
+                        # Apply AlertManager config
+                        kubectl apply -f /workspace/project/deployment/alertmanager-config.yaml
+
 
                         # Install Prometheus Stack with rules configuration
                         helm upgrade --install prometheus prometheus-community/prometheus \
@@ -213,14 +214,12 @@ spec:
                             --set server.persistentVolume.enabled=false \
                             --set alertmanager.persistentVolume.enabled=false \
                             --set alertmanager.enabled=true \
+                            --set alertmanager.configMapOverrideName=alertmanager-config \
                             --set server.extraFlags={"web.enable-lifecycle"} \
-                            --set server.configMapOverrideName=prometheus-rules \
-                            --set-file server.alerting.rules=/workspace/project/deployment/prometheus-alerts.yaml \
                             --wait
-                        
-                        # Wait for Prometheus to be ready
-                        kubectl rollout status statefulset/prometheus-server -n monitoring --timeout=300s
-                        
+
+                        # Apply PrometheusRules
+                        kubectl apply -f /workspace/project/deployment/prometheus-rules.yaml
 
                         # Install Grafana
                         helm upgrade --install grafana grafana/grafana \

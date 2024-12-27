@@ -215,10 +215,8 @@ spec:
                             --set alertmanager.configMapOverrideName=alertmanager-config \
                             --set alertmanager.enabled=true \
                             --set server.extraFlags={"web.enable-lifecycle"} \
+                            --set serverFiles."alerting\.rules".configMap=prometheus-alerts \
                             --wait
-
-                        # Apply PrometheusRules
-                        kubectl apply -f /workspace/project/deployment/prometheus-rules.yaml
                         
                         # Install Grafana
                         helm upgrade --install grafana grafana/grafana \

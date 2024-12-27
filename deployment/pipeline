@@ -204,12 +204,21 @@ spec:
                         helm repo add grafana https://grafana.github.io/helm-charts
                         helm repo update
                         
-                        # Install Prometheus Stack
+                        # Apply AlertManager config
+                        kubectl apply -f /workspace/project/deployment/alertmanager-config.yaml
+
+                        # Install Prometheus Stack with AlertManager configuration
                         helm upgrade --install prometheus prometheus-community/prometheus \
                             --namespace monitoring \
                             --set server.persistentVolume.enabled=false \
                             --set alertmanager.persistentVolume.enabled=false \
+                            --set alertmanager.configMapOverrideName=alertmanager-config \
+                            --set alertmanager.enabled=true \
+                            --set server.extraFlags={"web.enable-lifecycle"} \
                             --wait
+
+                        # Apply PrometheusRules
+                        kubectl apply -f /workspace/project/deployment/prometheus-rules.yaml
                         
                         # Install Grafana
                         helm upgrade --install grafana grafana/grafana \
@@ -223,25 +232,6 @@ spec:
                             --set datasources."datasources\\.yaml".datasources[0].access=proxy \
                             --set datasources."datasources\\.yaml".datasources[0].isDefault=true \
                             --wait
-                        
-                        # Get Grafana admin password
-                        echo "Grafana admin password: admin"
-                        
-                        # Get service URLs
-                        echo "Prometheus URL:"
-                        kubectl get svc -n monitoring prometheus-server -o jsonpath='{.spec.clusterIP}:{.spec.ports[0].port}'
-                        echo ""
-                        
-                        echo "Grafana URL:"
-                        kubectl get svc -n monitoring grafana -o jsonpath='{.spec.clusterIP}:{.spec.ports[0].port}'
-                        echo ""
-                        
-                        # Create port-forward instructions
-                        echo "To access Grafana UI, run:"
-                        echo "kubectl port-forward -n monitoring svc/grafana 3000:80"
-                        echo "Then visit: http://localhost:3000"
-                        echo "Username: admin"
-                        echo "Password: admin"
                         '''
                     }
                 }
@@ -284,7 +274,11 @@ spec:
             3. Login with:
                Username: admin
                Password: admin
-            
+
+            To access AlertManager:
+            1. Run: kubectl port-forward -n monitoring svc/alertmanager-main 9093:9093
+            2. Visit: http://localhost:9093
+
             To access Prometheus:
             1. Run: kubectl port-forward -n monitoring svc/prometheus-server 9090:80
             2. Visit: http://localhost:9090

@@ -52,6 +52,7 @@ spec:
                 }
             }
         }
+        /*
 
         stage('Get Minikube Registry IP Address') {
             steps {
@@ -190,6 +191,7 @@ spec:
                 }
             }
         }
+        */
 
         stage('Install Monitoring Stack') {
             steps {
@@ -198,28 +200,37 @@ spec:
                         sh '''
                         # Create monitoring namespace
                         kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-                        
+
                         # Add Helm repositories
                         helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
                         helm repo add grafana https://grafana.github.io/helm-charts
                         helm repo update
-                        
-                        # Apply AlertManager config
-                        kubectl apply -f /workspace/project/deployment/alertmanager-config.yaml
 
+                        # Install Prometheus Operator using Helm
+                        helm upgrade --install prometheus-operator prometheus-community/kube-prometheus-stack \
+                            --namespace monitoring \
+                            --set prometheusOperator.createCustomResource=false \
+                            --set prometheusOperator.admissionWebhooks.enabled=false \
+                            --set grafana.enabled=false \
+                            --set alertmanager.enabled=false \
+                            --set prometheus.enabled=false \
+                            --wait
 
-                        # Install Prometheus Stack with rules configuration
+                        # Wait for Prometheus Operator to be ready
+                        echo "Waiting for Prometheus Operator pods to be ready..."
+                        kubectl wait --for=condition=available deployment/prometheus-operator -n monitoring --timeout=300s
+
+                        # Install Prometheus Stack
                         helm upgrade --install prometheus prometheus-community/prometheus \
                             --namespace monitoring \
+                            --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
+                            --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
                             --set server.persistentVolume.enabled=false \
                             --set alertmanager.persistentVolume.enabled=false \
                             --set alertmanager.enabled=true \
                             --set alertmanager.configMapOverrideName=alertmanager-config \
                             --set server.extraFlags={"web.enable-lifecycle"} \
                             --wait
-
-                        # Apply PrometheusRules
-                        kubectl apply -f /workspace/project/deployment/prometheus-rules.yaml
 
                         # Install Grafana
                         helm upgrade --install grafana grafana/grafana \
@@ -234,20 +245,31 @@ spec:
                             --set datasources."datasources\\.yaml".datasources[0].isDefault=true \
                             --wait
 
-                        # Verify rules are loaded
+                        # Apply PrometheusRules from external file
+                        kubectl apply -f /workspace/project/deployment/prometheus-rules.yaml
+
+                        # Apply AlertManager config
+                        kubectl apply -f /workspace/project/deployment/alertmanager-config.yaml
+
+                        # Verify Prometheus rules are loaded
                         echo "Waiting for Prometheus to be ready..."
                         sleep 10
-                        
-                        # Get Prometheus pod name
-                        PROMETHEUS_POD=$(kubectl get pods -n monitoring -l app=prometheus,component=server -o jsonpath="{.items[0].metadata.name}")
-                        
+
+                        PROMETHEUS_POD=$(kubectl get pods -n monitoring -l "app.kubernetes.io/name=prometheus,app.kubernetes.io/component=server" -o jsonpath="{.items[0].metadata.name}")
+                        if [ -z "$PROMETHEUS_POD" ]; then
+                            echo "No Prometheus pod found. Checking all pods in monitoring namespace:"
+                            kubectl get pods -n monitoring --show-labels
+                            exit 1
+                        fi
+
                         echo "Checking configured rules..."
-                        kubectl exec -n monitoring $PROMETHEUS_POD -- wget -qO- http://localhost:9090/api/v1/rules
+                        kubectl exec -n monitoring $PROMETHEUS_POD -c prometheus -- wget -qO- http://localhost:9090/api/v1/rules || true
                         '''
                     }
                 }
             }
         }
+
 
         stage('Configure Grafana Dashboard') {
             steps {

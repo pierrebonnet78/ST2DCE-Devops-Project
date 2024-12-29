@@ -1,19 +1,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: kubernetes-alerts
+  name: example-prometheus-rule
   namespace: monitoring
-  labels:
-    app: prometheus
 spec:
   groups:
-    - name: kubernetes
+    - name: example
       rules:
-        - alert: PodNotRunning
-          expr: kube_pod_container_status_running{namespace=~"development|production"} == 0
+        - alert: HighRequestLatency
+          expr: http_request_duration_seconds_sum / http_request_duration_seconds_count > 0.5
           for: 5m
           labels:
-            severity: warning
+            severity: page
           annotations:
-            summary: Pod has been in a non-running state for more than 5 minutes
-            description: Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been in a non-running state for more than 5 minutes.
+            summary: "High request latency"

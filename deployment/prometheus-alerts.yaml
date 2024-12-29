@@ -1,18 +1,19 @@
-apiVersion: v1
-kind: ConfigMap
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
 metadata:
-  name: prometheus-alerts
+  name: kubernetes-alerts
   namespace: monitoring
-data:
-  alerts.rules: |
-    groups:
+  labels:
+    release: prometheus-operator
+spec:
+  groups:
     - name: kubernetes-alerts
       rules:
-      - alert: KubernetesPodNotHealthy
-        expr: sum by (namespace, pod) (kube_pod_status_phase{phase=~"Pending|Unknown|Failed"}) > 0
-        for: 15m
-        labels:
-          severity: critical
-        annotations:
-          summary: Kubernetes Pod not healthy (instance {{ $labels.instance }})
-          description: Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-running state for longer than 15 minutes.
+        - alert: KubernetesPodNotHealthy
+          expr: sum by (namespace, pod) (kube_pod_status_phase{phase=~"Pending|Unknown|Failed"}) > 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Kubernetes Pod not healthy (instance {{ $labels.instance }})
+            description: Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-running state for longer than 15 minutes.

@@ -4,7 +4,7 @@ metadata:
   name: kubernetes-alerts
   namespace: monitoring
   labels:
-    release: prometheus
+    release: prometheus-operator
 spec:
   groups:
     - name: kubernetes-alerts

@@ -1,0 +1,44 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+  labels:
+    release: prometheus-operator
+spec:
+  route:
+    receiver: "email-notifications"
+    groupWait: 10s
+    groupInterval: 1m
+    repeatInterval: 12h
+    routes:
+      - receiver: "email-notifications"
+        matchers:
+          - name: severity
+            value: critical
+  receivers:
+    - name: "email-notifications"
+      emailConfigs:
+        - to: "pierre.bonnet.19@efrei.net"
+          from: "pierre.drone1@gmail.com"
+          smarthost: "smtp.gmail.com:587"
+          authUsername: "pierre.drone1@gmail.com"
+          authIdentity: "pierre.drone1@gmail.com"
+          authPassword:
+            name: gmail-auth
+            key: password
+          requireTLS: true
+          tlsConfig:
+            insecureSkipVerify: false
+          subject: "ST2DCE Efrei project [ALERT] {{ .GroupLabels.alertname }} - {{ .Status | toUpper }}"
+          html: |
+            <h1>{{ .Status | toUpper }}</h1>
+            <h2>This alert is sent to you automatically by the AlterManager we've configured during the ST2DCE DevOps and Continuous Deployment project at Efrei.</h2>
+            <h2> Group members are : Pierre BONNET, Thimothee FOUGERON, Arthur BUISSON </h2>
+            <p><strong>Alert:</strong> {{ .GroupLabels.alertname }}</p>
+            <p><strong>Severity:</strong> {{ .CommonLabels.severity }}</p>
+            {{ range .Alerts }}
+              <h2>Instance: {{ .Labels.instance }}</h2>
+              <p><strong>Summary:</strong> {{ .Annotations.summary }}</p>
+              <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+            {{ end }}

@@ -222,10 +222,10 @@ spec:
 
 
                 # Apply PrometheusRules from external file
-                kubectl apply -f /workspace/project/deployment/prometheus-alerts.yaml
+                kubectl apply -f /workspace/project/monitoring/prometheus-alerts.yaml
 
                 # Apply AlertManager config
-                kubectl apply -f /workspace/project/deployment/alertmanager-config.yaml
+                kubectl apply -f /workspace/project/monitoring/alertmanager-config.yaml
 
                 # Verify Prometheus rules are loaded
                 echo "Waiting for Prometheus to be ready..."

@@ -1,0 +1,10 @@
+# Kubernetes Secrets
+**/gmail-secret.yaml
+*secret*.yaml
+**/secrets/
+
+# Additional security measures
+*.pem
+*.key
+*.crt
+*.env

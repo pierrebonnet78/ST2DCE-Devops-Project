@@ -1,0 +1,34 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubernetes-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus-operator
+spec:
+  groups:
+    - name: kubernetes-alerts
+      rules:
+        - alert: KubernetesPodNotHealthy
+          expr: |
+            (sum by (namespace, pod) (kube_pod_status_phase{phase=~"Pending|Unknown|Failed"}) > 0) or
+            (sum by (namespace, pod) (kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}) > 0)
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: Kubernetes Pod not healthy (instance {{ $labels.instance }})
+            description: Pod {{ $labels.namespace }}/{{ $labels.pod }} is either in a non-running state or CrashLoopBackOff for longer than 2 minutes.
+
+        - alert: KubernetesPodHighCPUUsage
+          expr: |
+            sum by (namespace, pod) (
+              rate(container_cpu_usage_seconds_total{container!=""}[2m])
+            ) > 0.8
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: High CPU usage in pod (instance {{ $labels.instance }})
+            description: Pod {{ $labels.namespace }}/{{ $labels.pod }} has CPU usage above 80% for more than 2 minutes.
+            value: "{{ $value }}"

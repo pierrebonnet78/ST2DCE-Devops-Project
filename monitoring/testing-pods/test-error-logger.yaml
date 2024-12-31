@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: error-logger
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: error-logger
+  template:
+    metadata:
+      labels:
+        app: error-logger
+    spec:
+      containers:
+        - name: logger
+          image: busybox
+          command: ["/bin/sh", "-c"]
+          args:
+            ["while true; do echo 'error: test error message'; sleep 10; done"]

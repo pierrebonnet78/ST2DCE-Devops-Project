@@ -31,10 +31,9 @@ spec:
           tlsConfig:
             insecureSkipVerify: false
           headers:
-            From: "pierre.drone1@gmail.com"
-            Subject: "ST2DCE Efrei project [ALERT] {{ .GroupLabels.alertname }} - {{ .Status | toUpper }}"
-            To: "pierre.bonnet.19@efrei.net"
-          text: |
+            - key: subject
+              value: "ST2DCE Efrei project [ALERT] {{ .GroupLabels.alertname }} - {{ .Status | toUpper }}"
+          html: |
             <h1>{{ .Status | toUpper }}</h1>
             <h2>This alert is sent to you automatically by the AlterManager we've configured during the ST2DCE DevOps and Continuous Deployment project at Efrei.</h2>
             <h2> Group members are : Pierre BONNET, Thimothee FOUGERON, Arthur BUISSON </h2>

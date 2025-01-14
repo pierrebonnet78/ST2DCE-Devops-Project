@@ -70,7 +70,7 @@ spec:
             steps {
                 container('deployer') {
                     script {
-                        withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                        withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
                             sh '''
                             
                             # Create .kube directory with proper permissions
@@ -113,7 +113,7 @@ spec:
         stage('Deploy to Development') {
             steps {
                 container('deployer') {
-                    withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
                         sh '''
                         source /workspace/registry.env
                         
@@ -142,7 +142,7 @@ spec:
         stage('Test Application Endpoint') {
             steps {
                 container('deployer') {
-                    withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
                         sh '''
                         # Wait for service to get an IP and endpoints to be ready
                         echo "Waiting for service to be ready..."
@@ -186,7 +186,7 @@ spec:
         stage('Deploy to Production') {
             steps {
                 container('deployer') {
-                    withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
                         sh '''
                         source /workspace/registry.env
                         
@@ -214,7 +214,7 @@ spec:
         stage('Install Monitoring Stack') {
     steps {
         container('deployer') {
-            withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+            withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
                 sh '''
                 # Create monitoring namespace
                 kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
@@ -299,7 +299,7 @@ spec:
         stage('Configure Grafana Dashboard and Datasources') {
             steps {
                 container('deployer') {
-                    withCredentials([file(credentialsId: 'conf', variable: 'KUBECONFIG')]) {
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
                         sh '''
                         # Wait for Grafana to be ready
                         kubectl rollout status deployment/prometheus-operator-grafana -n monitoring

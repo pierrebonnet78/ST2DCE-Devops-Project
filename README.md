@@ -12,7 +12,9 @@ The main goal of this project is to build an application and deploy it on a Dock
 
 ## Architecture Diagram
 
-![Architecture Diagram](./docs/architecture.png)
+<div style="text-align: center;">
+![Architecture Diagram](./docs/architecture.jpg)
+</div>
 
 ## How to run the project locally
 
@@ -100,7 +102,10 @@ From the jenkins web UI, go to Manage Jenkins > Clouds > New cloud :
 Add the cloud then select the credentials _kubeconfig_ created at step 8.
 
 Test the connection, you should obtain :
+
+<div style="text-align: center;">
 ![Kubernetes test connection](./docs/kubctl_test_connection.png)
+</div>
 
 ### Run the pipeline
 
@@ -109,7 +114,10 @@ The pipeline is automatically created when the jenkins container is run. As well
 To run the pipeline, go to the jenkins dashboard and run the _Deploy-Go-App_
 
 The pipeline should start and the final log looks like this :
-![Pipeline Success execution](pipeline_success_execution.png)
+
+<div style="text-align: center;">
+![Pipeline Success execution](./docs/pipeline_success_execution.png)
+</div>
 
 Follow the instructions given at the end of the pipeline to test :
 
